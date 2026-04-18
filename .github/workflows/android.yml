@@ -35,20 +35,32 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Install Capacitor CLI
-        run: npm install -g @capacitor/cli @capacitor/core @capacitor/android
-
-      - name: Initialize Capacitor
+      - name: Initialize and Sync Capacitor
         run: |
-          npx cap init Gallery com.android.gallery --web-dir dist
+          # 1. Create a backup of our custom native resources if they exist
+          mkdir -p native-backups
+          if [ -d "android/app/src/main/res" ]; then
+            cp -r android/app/src/main/res/* native-backups/
+          fi
+          
+          # 2. Clean up existing android folder to avoid 'already exists' error
+          rm -rf android
+          
+          # 3. Add fresh android platform
           npx cap add android
-
-      - name: Sync Capacitor
-        run: npx cap sync android
+          
+          # 4. Restore custom native resources
+          if [ -d "native-backups" ]; then
+            cp -r native-backups/* android/app/src/main/res/
+          fi
+          
+          # 5. Final sync
+          npx cap sync android
 
       - name: Build APK
         run: |
           cd android
+          chmod +x gradlew
           ./gradlew assembleDebug
 
       - name: Upload APK
