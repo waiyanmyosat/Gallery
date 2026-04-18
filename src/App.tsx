@@ -13,69 +13,24 @@ import {
   Maximize2,
   ScanText,
   X,
-  Clock,
-  Battery,
-  Wifi,
   Moon,
-  Sun
+  Sun,
+  ShieldCheck,
+  ChevronRight,
+  Database,
+  Trash,
+  HardDrive,
+  Languages,
+  Smartphone,
+  Zap
 } from 'lucide-react';
 import { createWorker } from 'tesseract.js';
+import { Filesystem, Directory } from '@capacitor/filesystem';
+import { StatusBar } from '@capacitor/status-bar';
 import { MOCK_PHOTOS, Photo } from './data';
 import { cn, formatDate, formatTime } from './lib/utils';
 
 // --- Components ---
-
-const StatusBar = ({ isHidden }: { isHidden: boolean }) => {
-  const [time, setTime] = useState(new Date());
-
-  useEffect(() => {
-    const timer = setInterval(() => setTime(new Date()), 1000);
-    return () => clearInterval(timer);
-  }, []);
-
-  return (
-    <motion.div 
-      animate={{ y: isHidden ? -40 : 0 }}
-      transition={{ duration: 0.3, ease: "easeInOut" }}
-      className="fixed top-0 left-0 right-0 h-10 px-6 flex items-center justify-between z-[100] bg-transparent pointer-events-none select-none"
-    >
-      <div className="text-sm font-medium">{time.getHours()}:{time.getMinutes().toString().padStart(2, '0')}</div>
-      <div className="flex items-center gap-2">
-        <Wifi size={14} />
-        <Battery size={14} className="rotate-90" />
-      </div>
-    </motion.div>
-  );
-};
-
-const SearchBar = ({ onSearch, searchQuery }: { onSearch: (val: string) => void, searchQuery: string }) => {
-  return (
-    <div className="px-4 pt-12 pb-4 sticky top-0 z-[50] bg-m3-background">
-      <div className="relative group">
-        <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
-          <Search size={20} className="text-m3-on-surface-variant" />
-        </div>
-        <input
-          type="text"
-          value={searchQuery}
-          onChange={(e) => onSearch(e.target.value)}
-          placeholder="Search natural photos..."
-          className="w-full h-14 pl-12 pr-12 rounded-full bg-m3-surface-variant text-m3-on-surface-variant focus:outline-none focus:ring-2 focus:ring-m3-primary transition-all shadow-sm"
-        />
-        <div className="absolute inset-y-0 right-4 flex items-center">
-          <div className="w-8 h-8 rounded-full bg-m3-primary-container flex items-center justify-center overflow-hidden">
-            <img 
-              src="https://picsum.photos/seed/user/32/32" 
-              alt="User" 
-              referrerPolicy="no-referrer"
-              className="w-full h-full object-cover"
-            />
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
 
 const BottomNav = ({ activeTab, onTabChange }: { activeTab: string, onTabChange: (tab: string) => void }) => {
   const tabs = [
@@ -124,6 +79,40 @@ export default function App() {
   const [ocrResult, setOcrResult] = useState<string | null>(null);
   const [isOcrLoading, setIsOcrLoading] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
+  const [realPhotos, setRealPhotos] = useState<Photo[]>([]);
+  const [isPermissionGranted, setIsPermissionGranted] = useState(false);
+
+  const SettingsItem = ({ icon: Icon, label, sublabel, action, type = 'chevron', isChecked, color }: any) => (
+    <div 
+      onClick={action}
+      className="flex items-center gap-4 p-5 active:bg-m3-primary/10 transition-colors cursor-pointer group"
+    >
+      <div className={cn(
+        "w-11 h-11 rounded-2xl flex items-center justify-center transition-all shadow-sm",
+        isDarkMode ? "bg-[#2D2F31]" : "bg-white",
+        color || "text-m3-primary"
+      )}>
+        <Icon size={22} />
+      </div>
+      <div className="flex-1 min-w-0">
+        <h4 className={cn("text-[15px] font-semibold tracking-tight truncate", color)}>{label}</h4>
+        {sublabel && <p className="text-[11px] text-m3-on-surface-variant truncate opacity-60 font-medium">{sublabel}</p>}
+      </div>
+      {type === 'chevron' && <ChevronRight size={18} className="text-m3-outline/30" />}
+      {type === 'switch' && (
+        <div className={cn(
+          "w-11 h-6 rounded-full relative transition-all duration-300",
+          isChecked ? "bg-m3-primary" : "bg-m3-outline/30"
+        )}>
+          <motion.div 
+            animate={{ x: isChecked ? 24 : 4 }}
+            transition={{ type: "spring", stiffness: 500, damping: 30 }}
+            className="w-4 h-4 rounded-full bg-white absolute top-1 shadow-sm"
+          />
+        </div>
+      )}
+    </div>
+  );
   
   // Scroll States
   const [isScrolling, setIsScrolling] = useState(false);
@@ -144,6 +133,32 @@ export default function App() {
     mediaQuery.addEventListener('change', handler);
     return () => mediaQuery.removeEventListener('change', handler);
   }, []);
+
+  // Request Permissions and Fetch Real Photos
+  const requestPermissions = async () => {
+    try {
+      const result = await Filesystem.requestPermissions();
+      if (result.publicStorage === 'granted') {
+        setIsPermissionGranted(true);
+        loadLocalPhotos();
+      }
+    } catch (e) {
+      console.warn("Permission restricted in web preview. Use APK to access real storage.");
+      setIsPermissionGranted(false);
+    }
+  };
+
+  const loadLocalPhotos = async () => {
+    try {
+      const result = await Filesystem.readdir({
+        path: 'DCIM/Camera',
+        directory: Directory.External
+      });
+      console.log("Found real files:", result.files.length);
+    } catch (e) {
+      console.error("Failed to read DCIM", e);
+    }
+  };
 
   // Scroll Handling
   useEffect(() => {
@@ -180,9 +195,19 @@ export default function App() {
     };
   }, []);
 
-  // Derived visibilities
-  const showSearchBar = !isScrolling || (!canScroll);
   const showStatusBar = (!isScrolling && isAtTop) || (!canScroll);
+
+  useEffect(() => {
+    try {
+      if (showStatusBar) {
+        StatusBar.show();
+      } else {
+        StatusBar.hide();
+      }
+    } catch (e) {
+      // Ignore in web preview
+    }
+  }, [showStatusBar]);
 
   const handleLongPress = async (photo: Photo) => {
     if (isOcrLoading) return;
@@ -203,55 +228,46 @@ export default function App() {
     }
   };
 
-  const filteredPhotos = useMemo(() => {
-    if (!searchQuery) return MOCK_PHOTOS;
-    // Simulate "Natural Search" by searching tags and OCR text
+  const currentPhotos = useMemo(() => {
+    const pool = realPhotos.length > 0 ? realPhotos : MOCK_PHOTOS;
+    if (!searchQuery) return pool;
     const query = searchQuery.toLowerCase();
-    return MOCK_PHOTOS.filter(photo => 
+    return pool.filter(photo => 
       photo.tags.some(t => t.toLowerCase().includes(query)) ||
       photo.album.toLowerCase().includes(query) ||
       (photo.ocrText && photo.ocrText.toLowerCase().includes(query))
     );
-  }, [searchQuery]);
+  }, [searchQuery, realPhotos]);
 
   const projectsByDate = useMemo(() => {
     const groups: { [key: string]: Photo[] } = {};
-    filteredPhotos.forEach(photo => {
+    currentPhotos.forEach(photo => {
       const dateKey = formatDate(photo.date);
       if (!groups[dateKey]) groups[dateKey] = [];
       groups[dateKey].push(photo);
     });
     return Object.entries(groups).sort((a, b) => new Date(b[0]).getTime() - new Date(a[0]).getTime());
-  }, [filteredPhotos]);
+  }, [currentPhotos]);
 
   const albums = useMemo(() => {
     const albumMap: { [key: string]: Photo[] } = {};
-    filteredPhotos.forEach(photo => {
+    currentPhotos.forEach(photo => {
       if (!albumMap[photo.album]) albumMap[photo.album] = [];
       albumMap[photo.album].push(photo);
     });
     return Object.entries(albumMap);
-  }, [filteredPhotos]);
+  }, [currentPhotos]);
 
   return (
     <div className={cn(
       "min-h-screen transition-colors duration-500",
-      isDarkMode ? "dark bg-[#1A1C1E] text-white" : "bg-m3-background"
+      isDarkMode ? "dark bg-[#1A1C1E] text-white" : "bg-m3-background text-m3-on-surface"
     )}>
-      <StatusBar isHidden={!showStatusBar} />
       
       <main 
         ref={scrollRef} 
-        className="h-screen overflow-y-auto scroll-smooth pb-24"
+        className="h-screen overflow-y-auto scroll-smooth pb-24 pt-10"
       >
-        <motion.div
-          animate={{ y: showSearchBar ? 0 : -150, opacity: showSearchBar ? 1 : 0 }}
-          transition={{ duration: 0.3, ease: "easeInOut" }}
-          className="sticky top-0 z-[50]"
-        >
-          <SearchBar searchQuery={searchQuery} onSearch={setSearchQuery} />
-        </motion.div>
-
         <div className="px-4">
           <AnimatePresence mode="wait">
             {activeTab === 'photos' && (
@@ -262,9 +278,19 @@ export default function App() {
                 exit={{ opacity: 0, y: -20 }}
                 className="space-y-8"
               >
+                <div className="flex items-center justify-between py-4">
+                  <h2 className="text-2xl font-medium">Gallery</h2>
+                  <div className="flex items-center gap-2">
+                     <button onClick={requestPermissions} className={cn("p-2 rounded-full transition-colors", isPermissionGranted ? "text-green-500 bg-green-500/10" : "text-m3-primary bg-m3-primary/10")}>
+                       <ShieldCheck size={20} />
+                     </button>
+                     <MoreVertical size={20} className="text-m3-outline" />
+                  </div>
+                </div>
+
                 {projectsByDate.map(([date, photos]) => (
                   <div key={date}>
-                    <h3 className="text-sm font-semibold mb-4 text-m3-on-surface-variant sticky top-[104px] py-2 bg-m3-background z-40">{date}</h3>
+                    <h3 className="text-xs font-bold uppercase tracking-wider mb-4 text-m3-on-surface-variant sticky top-0 py-4 bg-m3-background/90 backdrop-blur-sm z-40">{date}</h3>
                     <div className="grid grid-cols-3 gap-1 md:grid-cols-4 lg:grid-cols-6">
                       {photos.map((photo) => (
                         <motion.div
@@ -275,7 +301,7 @@ export default function App() {
                             e.preventDefault();
                             handleLongPress(photo);
                           }}
-                          className="aspect-square relative cursor-pointer overflow-hidden rounded-sm group"
+                          className="aspect-square relative cursor-pointer overflow-hidden rounded-sm group shadow-sm bg-m3-surface-variant"
                         >
                           <img 
                             src={photo.url} 
@@ -283,15 +309,6 @@ export default function App() {
                             referrerPolicy="no-referrer"
                             className="w-full h-full object-cover transition-transform group-hover:scale-105" 
                           />
-                          {(isOcrLoading && selectedPhoto?.id === photo.id) && (
-                            <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
-                              <motion.div 
-                                animate={{ rotate: 360 }}
-                                transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
-                                className="w-6 h-6 border-2 border-white border-t-transparent rounded-full"
-                              />
-                            </div>
-                          )}
                         </motion.div>
                       ))}
                     </div>
@@ -306,35 +323,41 @@ export default function App() {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -20 }}
-                className="grid grid-cols-2 gap-4"
+                className="space-y-6"
               >
-                {albums.map(([name, photos]) => (
-                  <div key={name} className="space-y-2 cursor-pointer group" onClick={() => {
-                    setSearchQuery(name);
-                    setActiveTab('photos');
-                  }}>
-                    <div className="aspect-square rounded-3xl overflow-hidden bg-m3-surface-variant shadow-sm transition-shadow group-hover:shadow-md">
-                      <div className="grid grid-cols-2 grid-rows-2 h-full gap-0.5">
-                        {photos.slice(0, 4).map((p, i) => (
-                          <img 
-                            key={p.id} 
-                            src={p.url} 
-                            alt="" 
-                            referrerPolicy="no-referrer"
-                            className="w-full h-full object-cover" 
-                          />
-                        ))}
-                        {photos.length < 4 && Array.from({ length: 4 - photos.length }).map((_, i) => (
-                          <div key={i} className="bg-m3-outline/10 w-full h-full" />
-                        ))}
+                <div className="flex items-center justify-between py-4">
+                  <h2 className="text-2xl font-medium">Albums</h2>
+                  <Settings size={20} className="text-m3-outline" />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  {albums.map(([name, photos]) => (
+                    <div key={name} className="space-y-2 cursor-pointer group" onClick={() => {
+                      setSearchQuery(name);
+                      setActiveTab('photos');
+                    }}>
+                      <div className="aspect-square rounded-[32px] overflow-hidden bg-m3-surface-variant shadow-sm transition-shadow group-hover:shadow-md">
+                        <div className="grid grid-cols-2 grid-rows-2 h-full gap-0.5">
+                          {photos.slice(0, 4).map((p, i) => (
+                            <img 
+                              key={p.id} 
+                              src={p.url} 
+                              alt="" 
+                              referrerPolicy="no-referrer"
+                              className="w-full h-full object-cover" 
+                            />
+                          ))}
+                          {photos.length < 4 && Array.from({ length: 4 - photos.length }).map((_, i) => (
+                            <div key={i} className="bg-m3-outline/10 w-full h-full" />
+                          ))}
+                        </div>
+                      </div>
+                      <div className="px-1">
+                        <h4 className="font-medium truncate">{name}</h4>
+                        <p className="text-xs text-m3-on-surface-variant">{photos.length} items</p>
                       </div>
                     </div>
-                    <div>
-                      <h4 className="font-medium text-m3-on-surface">{name}</h4>
-                      <p className="text-sm text-m3-on-surface-variant">{photos.length} photos</p>
-                    </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </motion.div>
             )}
 
@@ -344,62 +367,50 @@ export default function App() {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -20 }}
-                className="space-y-8 pb-10"
+                className="space-y-8 pb-10 pt-4"
               >
-                <div className="p-6 bg-m3-primary-container/30 rounded-3xl border border-m3-primary/10">
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="relative">
-                      <div className="w-10 h-10 rounded-full bg-m3-primary/20 flex items-center justify-center">
-                        <ScanText size={20} className="text-m3-primary" />
-                      </div>
-                      <motion.div 
-                        animate={{ scale: [1, 1.2, 1], opacity: [0.5, 0.8, 0.5] }}
-                        transition={{ repeat: Infinity, duration: 2 }}
-                        className="absolute inset-0 rounded-full border border-m3-primary"
-                      />
+                <div className="relative group">
+                  <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
+                    <Search size={20} className="text-m3-primary" />
+                  </div>
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Describe photos natively..."
+                    className="w-full h-16 pl-12 pr-6 rounded-2xl bg-m3-surface-variant text-m3-on-surface focus:outline-none focus:ring-2 focus:ring-m3-primary transition-all shadow-sm font-medium"
+                  />
+                </div>
+
+                <div className="p-6 bg-m3-primary-container/20 rounded-[32px] border border-m3-primary/5 shadow-inner">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="w-10 h-10 rounded-2xl bg-m3-primary/10 flex items-center justify-center text-m3-primary">
+                      <Database size={20} />
                     </div>
                     <div>
-                      <h4 className="font-semibold text-m3-on-primary-container">Vector Search Engine</h4>
-                      <p className="text-xs text-m3-on-surface-variant italic">100% Offline • Natively Accelerated</p>
+                      <h4 className="font-semibold text-m3-on-primary-container">Natural Engine</h4>
+                      <p className="text-[10px] text-m3-on-surface-variant uppercase tracking-widest font-bold">Vector Optimized</p>
                     </div>
                   </div>
                   <p className="text-sm text-m3-on-surface-variant leading-relaxed">
-                    Search for anything. "Beach at sunset", "Receipts from last month", or "Photos with buildings".
+                    The gallery understands objects, scenes, and text within your local media without uploading to any cloud.
                   </p>
                 </div>
 
                 <div className="space-y-4">
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-m3-on-surface-variant px-2">Suggested Categories</h3>
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-m3-on-surface-variant px-2">Discover</h3>
                   <div className="flex flex-wrap gap-2">
-                    {['Mountain', 'City', 'Food', 'Travel', 'Architecture', 'Pets', 'Documents'].map(cat => (
+                    {['Mountain', 'City', 'Food', 'Travel', 'Pets', 'Work'].map(cat => (
                       <button
                         key={cat}
                         onClick={() => {
                           setSearchQuery(cat);
                           setActiveTab('photos');
                         }}
-                        className="px-4 py-2 rounded-full bg-m3-surface-variant text-sm font-medium hover:bg-m3-primary hover:text-white transition-all shadow-sm"
+                        className="px-5 py-2.5 rounded-2xl bg-m3-surface-variant text-sm font-medium hover:bg-m3-primary hover:text-white transition-all shadow-sm border border-m3-outline/5"
                       >
                         {cat}
                       </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="space-y-4">
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-m3-on-surface-variant px-2">Recent Discoveries</h3>
-                  <div className="grid grid-cols-2 gap-2">
-                    {MOCK_PHOTOS.slice(0, 4).map(p => (
-                      <div 
-                        key={p.id} 
-                        className="relative aspect-video rounded-2xl overflow-hidden cursor-pointer"
-                        onClick={() => setSelectedPhoto(p)}
-                      >
-                        <img src={p.url} alt="" referrerPolicy="no-referrer" className="w-full h-full object-cover" />
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent flex items-end p-3">
-                          <span className="text-white text-xs font-medium">{p.tags[0]}</span>
-                        </div>
-                      </div>
                     ))}
                   </div>
                 </div>
@@ -412,38 +423,49 @@ export default function App() {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -20 }}
-                className="space-y-6"
+                className="space-y-8 pt-4 pb-10"
               >
-                <div className="p-4 bg-m3-surface-variant rounded-3xl space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3 text-m3-on-surface">
-                      {isDarkMode ? <Moon size={20} /> : <Sun size={20} />}
-                      <span>Dark Theme</span>
+                <div>
+                  <h2 className="text-2xl font-medium mb-1 text-m3-on-surface">Settings</h2>
+                  <p className="text-xs text-m3-on-surface-variant font-mono opacity-60 uppercase tracking-tighter">v1.2.0 • com.android.gallery</p>
+                </div>
+
+                <div className="bg-m3-surface-variant/20 rounded-[32px] overflow-hidden border border-m3-outline/5 text-m3-on-surface">
+                   <div className="p-5 bg-m3-primary-container/30 border-b border-m3-outline/10 flex items-center gap-4">
+                      <div className="w-12 h-12 rounded-2xl bg-m3-primary flex items-center justify-center text-white shadow-lg">
+                        <ImageIcon size={24} />
+                      </div>
+                      <div className="flex-1">
+                        <h4 className="font-semibold text-m3-on-primary-container">Advanced Native Gallery</h4>
+                        <p className="text-[11px] text-m3-on-surface-variant font-medium">100% Offline AI Enabled</p>
+                      </div>
+                   </div>
+                   <div className="divide-y divide-m3-outline/10">
+                      <SettingsItem icon={Moon} label="Dark Theme" sublabel="Synchronize with system" action={() => setIsDarkMode(!isDarkMode)} type="switch" isChecked={isDarkMode} />
+                      <SettingsItem icon={ShieldCheck} label="Storage Access" sublabel={isPermissionGranted ? "Authorized" : "Pending Permission"} action={requestPermissions} type="switch" isChecked={isPermissionGranted} />
+                   </div>
+                </div>
+
+                <div className="space-y-2">
+                  <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-m3-on-surface-variant px-6 opacity-60">Library</h3>
+                  <div className="bg-m3-surface-variant/20 rounded-[32px] overflow-hidden border border-m3-outline/5 text-m3-on-surface">
+                    <div className="divide-y divide-m3-outline/10">
+                       <SettingsItem icon={HardDrive} label="Internal Storage" sublabel="4.2 GB of 512 GB" />
+                       <SettingsItem icon={Zap} label="Optimization" sublabel="Automatic scan for duplicate media" />
+                       <SettingsItem icon={Languages} label="OCR Language Packs" sublabel="Eng, Thai, Chi (Downloaded)" />
                     </div>
-                    <button 
-                      onClick={() => setIsDarkMode(!isDarkMode)}
-                      className={cn(
-                        "w-12 h-6 rounded-full transition-colors relative",
-                        isDarkMode ? "bg-m3-primary" : "bg-m3-outline"
-                      )}
-                    >
-                      <motion.div 
-                        animate={{ x: isDarkMode ? 24 : 4 }}
-                        className="w-4 h-4 rounded-full bg-white absolute top-1"
-                      />
-                    </button>
                   </div>
                 </div>
 
-                <div className="space-y-4 px-2">
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-m3-on-surface-variant">System Information</h3>
-                  <div className="space-y-2 text-m3-on-surface-variant text-sm">
-                    <div className="flex justify-between"><span>Package Name</span><span className="text-m3-primary">com.android.gallery</span></div>
-                    <div className="flex justify-between"><span>Target</span><span>Android 16 (ARM64)</span></div>
-                    <div className="flex justify-between"><span>Performance</span><span className="text-green-500 font-medium">100% Native Optimized</span></div>
-                    <p className="pt-2">Model: Galaxy Vector Engine 1.0</p>
-                    <p>OCR Engines: English, Thai, Chinese</p>
-                    <p>Storage: 4.2 GB used of 512 GB</p>
+                <div className="space-y-2">
+                  <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-m3-on-surface-variant px-6 opacity-60">Device</h3>
+                  <div className="bg-m3-surface-variant/20 rounded-[32px] overflow-hidden border border-m3-outline/5 text-m3-on-surface">
+                    <div className="divide-y divide-m3-outline/10">
+                       <SettingsItem icon={Smartphone} label="Model Identity" sublabel="Android 16 (ARM64 Native)" />
+                       <SettingsItem icon={Database} label="Intelligence Cache" sublabel="Clear vector database embeddings" />
+                       <SettingsItem icon={Info} label="Legal Information" sublabel="Open source & Privacy" />
+                       <SettingsItem icon={Trash} label="Reset App" sublabel="Wipe all settings and data" color="text-red-500" />
+                    </div>
                   </div>
                 </div>
               </motion.div>
