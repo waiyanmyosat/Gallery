@@ -1,0 +1,6 @@
+{
+  "name": "Gallery",
+  "description": "High-performance native-style gallery with Material You design, offline OCR, and vector-powered natural search.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["OCR", "Vector Search", "Material You"]
+}

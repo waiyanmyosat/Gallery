@@ -1,0 +1,76 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  
+  /* Material You / Material 3 Palette (Tonal Palettes) */
+  --color-m3-primary: #0061A4;
+  --color-m3-on-primary: #FFFFFF;
+  --color-m3-primary-container: #D1E4FF;
+  --color-m3-on-primary-container: #001D36;
+  
+  --color-m3-secondary: #535F70;
+  --color-m3-on-secondary: #FFFFFF;
+  --color-m3-secondary-container: #D7E3F7;
+  --color-m3-on-secondary-container: #101C2B;
+  
+  --color-m3-tertiary: #6B5778;
+  --color-m3-on-tertiary: #FFFFFF;
+  --color-m3-tertiary-container: #F2DAFF;
+  --color-m3-on-tertiary-container: #251431;
+  
+  --color-m3-error: #BA1A1A;
+  --color-m3-on-error: #FFFFFF;
+  --color-m3-error-container: #FFDAD6;
+  --color-m3-on-error-container: #410002;
+  
+  --color-m3-background: #FDFCFF;
+  --color-m3-on-background: #1A1C1E;
+  
+  --color-m3-surface: #FDFCFF;
+  --color-m3-on-surface: #1A1C1E;
+  --color-m3-surface-variant: #DFE2EB;
+  --color-m3-on-surface-variant: #43474E;
+  --color-m3-outline: #73777F;
+}
+
+@layer base {
+  body {
+    @apply bg-m3-background text-m3-on-background font-sans overflow-x-hidden;
+    /* Hide scrollbar but allow scrolling */
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  body::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Material Ripple Effect simulation */
+.ripple {
+  position: relative;
+  overflow: hidden;
+}
+
+.ripple::after {
+  content: "";
+  display: block;
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  background-image: radial-gradient(circle, #000 10%, transparent 10.01%);
+  background-repeat: no-repeat;
+  background-position: 50%;
+  transform: scale(10, 10);
+  opacity: 0;
+  transition: transform .5s, opacity 1s;
+}
+
+.ripple:active::after {
+  transform: scale(0, 0);
+  opacity: .2;
+  transition: 0s;
+}
